@@ -68,7 +68,7 @@ public class PathfinderAgent {
 	public List<Int2D>  computePath_Astar(Int2D start_loc, Int2D target_loc){
 		//ashtable<PointPriority,PointPriority>
 		
-		
+		System.out.println("githubworking?");
 		double costStart = getCostOfCell(start_loc);
 		double costTarget= getCostOfCell(start_loc);
 		//System.out.println(costStart);
