@@ -65,7 +65,7 @@ public class Viewer extends GUIState{
 		// tell the portrayals what to portray and how to portray them
 	    Class objects[] = {Tree.class, Wall.class, SimObject.class, Bush.class, Water.class, House.class};
 		
-		
+		//SimplePortrayal2D basic = new TrailedPortrayl2D();
 	    knownWorld.setField( ((Simulator)state).env.getMapper().knownWorld);
 	    
 	    for(Class c : objects){

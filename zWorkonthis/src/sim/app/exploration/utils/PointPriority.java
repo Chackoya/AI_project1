@@ -33,5 +33,7 @@ public class PointPriority {
 		return priority;
 	}
 	
-	
+	public void setPriority(double p) {
+		priority=p;
+	}
 }

@@ -18,6 +18,7 @@ import sim.app.exploration.objects.SimObject;
 import sim.app.exploration.objects.Tree;
 import sim.app.exploration.objects.Wall;
 import sim.app.exploration.objects.Water;
+import sim.app.exploration.utils.SplitMapBroker;
 
 public class SimEnvironment implements Steppable{
 
@@ -37,6 +38,8 @@ public class SimEnvironment implements Steppable{
 	private int step = 0;
 	private final int maxSteps = 5000;
 	
+	SplitMapBroker smp;
+	private int nbSplits =3;
 	FileWriter writer;
 	
 	public SimEnvironment(SimState state, int width, int height, int nAgents){
@@ -46,18 +49,27 @@ public class SimEnvironment implements Steppable{
 		
 		this.explorers = new Vector<ExplorerAgent>(nAgents);
 		this.mapper = new MapperAgent(width, height);
-		this.broker = new BrokerAgent();
+		
+		this.smp =  new SplitMapBroker(width,height, nbSplits,nAgents);
+		
+		
+		this.broker = new BrokerAgent(this.smp);
 		//new:
 		this.pathfinder= new PathfinderAgent(this.mapper);
 		this.qlearn= new QlearnAgent(this.mapper);
 		
 		this.setup(state);
 		
+		smp.gen_ZoneBounds();
+		smp.assignZones(this.explorers);
+		smp.debugPrints(0);
+		
 		try {
 			writer = new FileWriter("stats.csv");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
 	}
 	
 	/**
@@ -80,8 +92,9 @@ public class SimEnvironment implements Steppable{
 	private void addExplorersRandomly(SimState state) {
 		for(int i= 0; i < explorers.capacity(); i++){
 			Int2D loc = new Int2D(state.random.nextInt(world.getWidth()),state.random.nextInt(world.getHeight()));
-			addExplorer(state, loc);
+			addExplorer(state, loc,i);
 		}
+		
 	}
 	
 	private void addExplorersCornersCenter(SimState state) {
@@ -89,7 +102,7 @@ public class SimEnvironment implements Steppable{
 		// 4 Explorers in the center of the map
 		for (int i = 0; i < 4; i++) {
 			Int2D loc = new Int2D(world.getWidth() / 2, world.getHeight() / 2);
-			addExplorer(state, loc);
+			addExplorer(state, loc,i);
 		}
 		
 		// 4 Explorers on all 4 corners
@@ -100,12 +113,12 @@ public class SimEnvironment implements Steppable{
 		locs[3] = new Int2D(world.getWidth(), 0);
 		
 		for (Int2D l : locs)
-			addExplorer(state, l);
+			addExplorer(state, l,0); //modify here for id
 		
 	}
 	
-	private void addExplorer(SimState state, Int2D loc) {
-		ExplorerAgent explorer = new ExplorerAgent(loc);
+	private void addExplorer(SimState state, Int2D loc,int id) {
+		ExplorerAgent explorer = new ExplorerAgent(loc,id);
 		explorers.add(explorer);
 		
 		mapper.updateLocation(explorer,loc);
@@ -119,11 +132,9 @@ public class SimEnvironment implements Steppable{
 	}
 	
 	/* Map Generation Methods */
-	
 	private void buildRandomMap(SimState state) {
 		Class classes[] = {Wall.class, Tree.class, Bush.class, Water.class, House.class};
-		//int numberOfInstances[] = {400, 200, 200, 100, 20};
-		int numberOfInstances[] = {15, 2, 2, 1, 2};
+		int numberOfInstances[] = {400, 200, 200, 100, 20};
 		Int2D loc;
 		
 		for (int i = 0; i < classes.length; i++) {
@@ -131,39 +142,18 @@ public class SimEnvironment implements Steppable{
 			for(int j = 0; j < numberOfInstances[i]; j++) {
 				do { loc = new Int2D(state.random.nextInt(world.getWidth()),state.random.nextInt(world.getHeight())); }
 				while (occupied[loc.x][loc.y] != null);
-				/*
-				if (i==0) {
-					if (loc.x+ world.getWidth()/10 < world.getWidth()) {
-						int itmp =0;
-						while (loc.x+i < loc.x +world.getWidth()/10) {
-							Int2D newTmpLoc = new Int2D(loc.x+itmp, loc.y);
-							if(occupied[loc.x+i][loc.y]==null)
-								addObject(Wall.class, newTmpLoc);
-							i=i+1;
-						}
-					}
-					else {
-						addObject(classes[i],loc);
-					}
 				
-				}
-				*/
-				addObject(classes[i],loc);
+				addObject(classes[i], loc);
 			}
 			
 		}
-		
-		
-		
-		
-		
 	}
 	
 	private void buildCustomMap(SimState state) {
 		
-		Class classes[] = {Hole.class, Tree.class, Bush.class, Water.class, House.class};
+		Class classes[] = {Wall.class, Tree.class, Bush.class, Water.class, House.class};
 		//int numberOfInstances[] = {400, 200, 200, 100, 20};
-		int num_instances[] = {10, 4, 5, 4, 2};
+		int num_instances[] = {3, 5, 2, 2, 2};
 		Int2D loc;
 		
 		
@@ -261,7 +251,7 @@ public class SimEnvironment implements Steppable{
 		Int2D loc;
 		
 		// Number of instances per block
-		int num_instances = 900;
+		int num_instances = 600;
 		
 		int height_separation = world.getHeight()/3;
 		int width_separation = world.getWidth()/3;
@@ -439,6 +429,10 @@ public class SimEnvironment implements Steppable{
 		return visible;
 	}
 
+	
+	
+	
+	
 	public SimObject identifyObject(Int2D loc) {
 		
 		Bag here = world.getObjectsAtLocation(loc.x, loc.y);
@@ -447,13 +441,16 @@ public class SimEnvironment implements Steppable{
 		if(here == null){
 			return null;
 		}
-		/*OLD BUGGED
+	    //OLD BUGGED
+		/*
 		while((here.get(i) instanceof ExplorerAgent) && i<here.numObjs) i++;
 		
 		SimObject real = (SimObject) here.get(i);
 		
 		return real;
+		
 		*/
+		
 		while( i<here.numObjs &&(here.get(i) instanceof ExplorerAgent) ) {
 			i++;
 		}
@@ -464,8 +461,6 @@ public class SimEnvironment implements Steppable{
 		//System.out.println("SIZE BAG:"+here.size()+" AND VALUE OF I:"+i);
 		
 		if (here.size()>0 && (i>0)){
-			//System.out.println("bug gg ff");
-			//SimObject real = (SimObject) here.get(i-1);
 			return null;
 		}
 		
@@ -473,6 +468,7 @@ public class SimEnvironment implements Steppable{
 		
 		return real;
 		
+
 		
 	}
 
@@ -480,5 +476,9 @@ public class SimEnvironment implements Steppable{
 		
 		world.setObjectLocation(agent, loc);	
 	}
-
+	
+	
+	public SparseGrid2D getWorld() {
+		return world;
+	}
 }

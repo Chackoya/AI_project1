@@ -12,20 +12,22 @@ import java.util.Vector;
 import sim.app.exploration.env.SimEnvironment;
 import sim.app.exploration.objects.Prototype;
 import sim.app.exploration.objects.SimObject;
+import sim.app.exploration.objects.Wall;
 import sim.app.exploration.utils.PointPriority;
 import sim.app.exploration.utils.Utils;
 import sim.engine.SimState;
 import sim.util.Bag;
 import sim.util.Double2D;
 import sim.util.Int2D;
+import sim.util.IntBag;
 import sim.util.MutableInt2D;
 
 public class ExplorerAgent implements sim.portrayal.Oriented2D {
 
 	private static final long serialVersionUID = 1L;
-	private float INTEREST_THRESHOLD = 60;
+	private float INTEREST_THRESHOLD = 65;
 	private final double STEP = Math.sqrt(2);
-	private final int viewRange = 4;
+	private final int viewRange =20;
 	
 	private int identifyClock;
 
@@ -36,36 +38,89 @@ public class ExplorerAgent implements sim.portrayal.Oriented2D {
 	public SimEnvironment env;
 	public BrokerAgent broker;
 	public MapperAgent mapper;
+
+	private Vector<Prototype> knownObjects;
+
+	private boolean GLOBAL_KNOWLEDGE = true;
+	private int IDENTIFY_TIME =15;
+	
 	//new attributes: -----------------------------
+	
+	private int id;
+	
 	public PathfinderAgent pathfinder;
 	//Hashtable<PointPriority,PointPriority> pathToNextTarget =  new Hashtable<PointPriority,PointPriority>();
 	List<Int2D> pathToNextTarget = new ArrayList<Int2D>();
 	public QlearnAgent qlearn;
+	private int nbStepsLeft=0;
 	//-------------------
 	
-	private Vector<Prototype> knownObjects;
-
-	private boolean GLOBAL_KNOWLEDGE = true;
-	private int IDENTIFY_TIME = 15;
-
-	public ExplorerAgent(Int2D loc) {
+	
+	public ExplorerAgent(Int2D loc,int id) {
 		this.loc = loc;
 		this.orientation = 0;
 		this.target = null;
 		this.knownObjects = new Vector<Prototype>();
 		this.identifyClock = 0;
+		this.id = id;
+	}
+	
+	public Bag new_getVisible_Objects_LocsFrontiers(int x, int y, int viewRange) {
+		IntBag xbag = new IntBag();
+		IntBag ybag = new IntBag();
+		Bag all = env.getWorld().getNeighborsHamiltonianDistance(x, y, viewRange, false, null, xbag, ybag);
+		//Bag all = env.getWorld().getNeighborsMaxDistance(x, y, viewRange, false, null, xbag, ybag);
+		Bag visible = new Bag();
+		
+		for (int i = 0 ;i<xbag.size();i++) {
+			Int2D tmp = (new Int2D(xbag.get(i),ybag.get(i)));
+			if(tmp.x == x+viewRange || tmp.x==x-viewRange || tmp.y==y-viewRange|| tmp.y == y+viewRange) {
+				if(mapper.frontierTracking[tmp.y][tmp.x]==0) {
+					mapper.frontierTracking[tmp.y][tmp.x]=2;
+					//System.out.println("HERE>>>>>>>>>"+tmp+" and mapperfrontiertrack:"+tmp.y+" ,;"+tmp.x);
+					broker.addFrontierPoint(tmp);
+				}
+			}	
+			else {
+				mapper.frontierTracking[tmp.y][tmp.x]=1;
+				broker.removeFrontierPoint(tmp);
+				//broker.addFrontierPoint(tmp);
+				
+			}
+				
+		}
+		/*
+		for (int i = 0;i<mapper.frontierTracking.length;i++) {
+			for(int j = 0 ;j<mapper.frontierTracking[0].length;j++) {
+				System.out.print(mapper.frontierTracking[i][j]+" ");
+			}
+			System.out.println("");
+		}
+		System.out.println("---");
+		*/
+		//System.out.println(">>>>>>>>>>>>>>>>>SIZE BROKER:"+broker.ptsFrontier_byZone.size());
+		for(Object b: all){
+			if(b instanceof ExplorerAgent) continue;
+			
+			SimObject o = (SimObject) b;
+			visible.add(new SimObject(o));
+		}
+		
+		return visible;
 	}
 
 	public void step(SimState state) {
 
+		//System.out.println(id);
+		//System.out.println("Identified Obj:"+mapper.identifiedObjects.length+" // knownWorld:"+mapper.knownWorld.toString()+"// knownobjects:"+mapper.knownObjects.capacity());
 		// The explorer sees the neighboring objects and sends them to the
 		// mapper
 		if (identifyClock == 0) {
-			Bag visible = env.getVisibleObejcts(loc.x, loc.y, viewRange);
-
+			Bag visible = new_getVisible_Objects_LocsFrontiers(loc.x, loc.y, viewRange);
 			// -------------------------------------------------------------
 			for (int i = 1; i < visible.size(); i++) {
 				SimObject obj = (SimObject) visible.get(i);
+				//if(obj.getClass()==Wall.class)continue;
 
 				if (!mapper.isIdentified(obj.loc)) {
 					Hashtable<Class, Double> probs = getProbabilityDist(obj);
@@ -115,51 +170,26 @@ public class ExplorerAgent implements sim.portrayal.Oriented2D {
 			// If the explorer has no target, he has to request a new one from
 			// the broker
 			if (target == null) {
-				target = broker.requestTarget(loc);
-				//System.out.println("NEW TARGET: X: " + target.x + " Y: "
-				//		+ target.y);
+				target = broker.requestTarget(loc,this);
+				//System.out.println(">>>>>NEW TARGET: X: " + target.x + " Y: "+ target.y);
+				//>pathToNextTarget.clear();
+				//>pathToNextTarget= pathfinder.computePath_Astar(loc, target);
+				//>if(pathToNextTarget.size()>100)
+				//>	System.out.println("<<<<<EXPAGENT:"+pathToNextTarget.size());
 			}
-			
 			//if we have a target, we ask the pathfinder to give us the best path
 			/**
 			 * COMPUTATION OF A* ALGORITHM BY PATHFINDER
 			 */
-			//PointPriority pploc = new PointPriority (loc,pathfinder.getCostOfCell(loc));
+			//>newMove=pathToNextTarget.remove(0);
+			//>if(pathToNextTarget.size()>100)
+				//>System.out.println("---------WE PERFORM THIS MOVE: "+newMove.x+";"+newMove.y);
+				//>}
+			//>}
+			//>this.loc= newMove;
+			//>newMove=null;
 			
-			//PointPriority pptarget = new PointPriority(target, pathfinder.getCostOfCell(target));
-			
-			//System.out.println("Loc x : "+loc.x + " and y :"+loc.y);
-			//System.out.println("target x : "+target.x + " and y :"+target.y);
-			//System.out.println("");
-			//pathToNextTarget= pathfinder.computePath_Astar(loc, target);
-			
-			//System.out.println("SIZE PATHFINDER:"+pathToNextTarget.size());
-			
-			//qlearn.printWorld();
-			// Agent movement
-			
-			/*
-			Int2D newMove=null;
-			if (!pathToNextTarget.isEmpty()) {
-				newMove= pathToNextTarget.remove(0);
-				System.out.println("WE PERFORM THIS MOVE: "+newMove.x+";"+newMove.y);
-			}
-			
-			else {
-				if(target !=null) {
-					
-					
-					pathToNextTarget= pathfinder.computePath_Astar(loc, target);
-					newMove=pathToNextTarget.remove(0);
-					System.out.println("WE PERFORM THIS MOVE: "+newMove.x+";"+newMove.y);
-				}
-			}
-			
-			
-			this.loc= newMove;
-			newMove=null;
-			
-			*/
+		
 			// Agent movement
 			Double2D step = new Double2D(target.x - loc.x, target.y - loc.y);
 			step.limit(STEP);
@@ -286,5 +316,10 @@ public class ExplorerAgent implements sim.portrayal.Oriented2D {
 	public double getOrientation() {
 		return orientation;
 	}
+	
+	public int getID() {
+		return id;
+	}
 
 }
+

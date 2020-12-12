@@ -1,10 +1,11 @@
-package sim.app.exploration.agents;
+                package sim.app.exploration.agents;
 
 import sim.app.exploration.objects.*;
 
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Hashtable;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -12,7 +13,7 @@ import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import jdk.internal.module.ModuleLoaderMap.Mapper;
+//import jdk.internal.module.ModuleLoaderMap.Mapper;
 import sim.app.exploration.objects.SimObject;
 import sim.app.exploration.utils.PointPriority;
 import sim.app.exploration.utils.PointPriorityComparator;
@@ -29,9 +30,9 @@ public class PathfinderAgent {
 	public Network graph;
 
 	
-	private static final double COST_PATH_TREE=2;
+	private static final double COST_PATH_TREE=3;
 	private static final double COST_PATH_WATER=5;
-	private static final double COST_PATH_HOUSE=2;
+	private static final double COST_PATH_HOUSE=10;
 	private static final double COST_PATH_WALL=100;
 	private static final double COST_PATH_UNKNOWN=1;
 	
@@ -48,9 +49,10 @@ public class PathfinderAgent {
 		
 	}
 	
-	static public double Heuristic(PointPriority  a, PointPriority b)
+	static public double Heuristic(Int2D a,Int2D b)
     {
-		return Math.abs(a.getInt2D_PointPrio().x - b.getInt2D_PointPrio().x) + Math.abs(a.getInt2D_PointPrio().y - b.getInt2D_PointPrio().y);
+		return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+		//return Math.sqrt(Math.pow(a.x - b.x,2)+ Math.pow(a.y - b.y,2));
     }
 	
 
@@ -65,15 +67,13 @@ public class PathfinderAgent {
 	 * @param target_loc
 	 * @return
 	 */
-	public List<Int2D>  computePath_Astar(Int2D start_loc, Int2D target_loc){
+	public List<Int2D> computePath_Astar(Int2D start_loc, Int2D target_loc){
 		//ashtable<PointPriority,PointPriority>
-		
-		System.out.println("githubworking?");
 		double costStart = getCostOfCell(start_loc);
 		double costTarget= getCostOfCell(start_loc);
 		//System.out.println(costStart);
 		PointPriority start_l = new PointPriority(start_loc, costStart);
-		PointPriority target_l = new PointPriority(target_loc, costTarget);
+		PointPriority target_l = new PointPriority(target_loc,0);
 		
 		PriorityQueue<PointPriority> frontier =  new PriorityQueue<PointPriority>(new PointPriorityComparator());
 		
@@ -86,15 +86,20 @@ public class PathfinderAgent {
 		costSoFar.put(start_l.getInt2D_PointPrio(), 0.0);
 		//cameFrom.put(start_l, start_l);
 
-		//cameFrom.add(start_l.getInt2D_PointPrio());
+		cameFrom.add(start_l.getInt2D_PointPrio());
 		while (frontier.size()>0) {
 			PointPriority current = frontier.poll();
+			//System.out.println("SIZE FRONTIER:"+frontier.size());
 			//System.out.println("The prio is:"+current.getPriority() );
 			Int2D currentInt2D = current.getInt2D_PointPrio();
 			//System.out.println("Show X:"+currentInt2D.x + " SHOW Y:"+currentInt2D.y);
-			
-			if(currentInt2D.equals(target_l.getInt2D_PointPrio())) {
+			//if(currentInt2D.equals(target_l.getInt2D_PointPrio())) {
+			if(   Heuristic(currentInt2D,target_l.getInt2D_PointPrio())<=1    ) {
 				//cameFrom.put(target_l, target_l);
+				cameFrom.add(current.getInt2D_PointPrio());
+				break;
+			}
+			else if(currentInt2D.equals(target_l.getInt2D_PointPrio())) {
 				break;
 			}
 			IntBag xbag = new IntBag();
@@ -105,29 +110,32 @@ public class PathfinderAgent {
 			
 			
 			Bag tmpNeighbors = convertNeighborsToPointPrio(xbag,ybag);
-			
 			for(int i =0; i<tmpNeighbors.numObjs;i++) {
 
 				PointPriority next = (PointPriority)tmpNeighbors.get(i);
 				
-				if (next.getPriority()==COST_PATH_WALL) {
-					continue;
-				}
+				//if (next.getPriority()==COST_PATH_WALL) {
+				//	continue;
+				//}
 				
 				double newCost = costSoFar.get(current.getInt2D_PointPrio()) + next.getPriority();
-				
+				//System.out.println(">>>>>>>>>>>>>>>>CostSofar:"+newCost);
 				if (!costSoFar.containsKey(next.getInt2D_PointPrio()) || newCost < costSoFar.get(next.getInt2D_PointPrio())) {
 					
 					//costSoFar.put(tmpPoint, newCost);
-					double prio = newCost+ Heuristic(next, target_l );
+					double prio = newCost+ Heuristic(next.getInt2D_PointPrio(), target_l.getInt2D_PointPrio() );
 					
 					//put in the frontier priorityQueue the next point with new cost updated
-					PointPriority toAddFrontier = new PointPriority(next.getInt2D_PointPrio(),prio);
-					frontier.add(toAddFrontier);
-					costSoFar.put(toAddFrontier.getInt2D_PointPrio(), newCost);
+					//PointPriority toAddFrontier = new PointPriority(next.getInt2D_PointPrio(),prio);
+					next.setPriority(prio);
+					
+					costSoFar.put(next.getInt2D_PointPrio(), newCost);
+					
 					//cameFrom.put(current,toAddFrontier);
 					if (!cameFrom.contains(current.getInt2D_PointPrio())) 
-					cameFrom.add(current.getInt2D_PointPrio());
+						cameFrom.add(current.getInt2D_PointPrio());
+					if(!frontier.contains(next))
+						frontier.add(next);
 					
 				}
 				
@@ -146,23 +154,29 @@ public class PathfinderAgent {
 		//});
 		
 		cameFrom.add(target_loc);
+		List<Int2D>rescameFrom= new ArrayList<Int2D>();
 		
 		for (int i = 0;i<cameFrom.size();i++) {
 			System.out.print("index "+i+" :"+cameFrom.get(i)+" ..");
+			if(!rescameFrom.contains(cameFrom.get(i))){
+			rescameFrom.add(cameFrom.get(i));
+			}
+			
+			
 		}
 		
-		System.out.println("");
-		cameFrom.remove(0);
-		return cameFrom;
+		System.out.println("PATHFINDER:"+rescameFrom.size());
+		//cameFrom.remove(0);
+		
+		return rescameFrom;//cameFrom;
 		
 	}
 	
-	
-	
-	
-	
+
 	/////////////////////// UTILITIES:
-	
+	public boolean inRangeOfOne(Int2D curr,Int2D target) {
+		return true;
+	}
 	
 	public Bag convertNeighborsToPointPrio(IntBag xbag, IntBag ybag) {
 		Bag resBag = new Bag();
@@ -228,15 +242,16 @@ public class PathfinderAgent {
 				else if (o instanceof Water) cost = COST_PATH_WATER;
 				else if (o instanceof House) cost = COST_PATH_HOUSE;
 				else if (o instanceof Wall) cost = COST_PATH_WALL;
-				else cost = 1;
+				else cost = COST_PATH_UNKNOWN;
 			}
 			
 		}
+		/*
 		else {
 			cost = COST_PATH_UNKNOWN;
 		}
 		
-		
+		*/
 		
 		return cost;
 	}

@@ -16,10 +16,16 @@ public class MapperAgent {
 	public Class[][] identifiedObjects;
 	public Vector<Prototype> knownObjects;
 	
+	
+	public int[][] frontierTracking;
+	
 	public MapperAgent(int width, int height){
 		knownWorld = new SparseGrid2D(width, height);
 		identifiedObjects = new Class[width][height];
 		this.knownObjects = new Vector<Prototype>();
+		
+		
+		frontierTracking = new int[height][width];
 	}
 	
 	/**
